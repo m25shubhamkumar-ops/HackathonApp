@@ -133,7 +133,9 @@ fun HomeScreen(
                             Intent.ACTION_VIEW,
                             Uri.parse("https://leetcode.com/contest/")
                         )
-                        context.startActivity(intent)
+                        try {
+                            context.startActivity(intent)
+                        } catch (_: Exception) { }
                         onEnterArenaClick()
                     },
                     modifier = Modifier

@@ -263,5 +263,7 @@ fun setCalendarReminder(context: Context, title: String, timeDesc: String) {
             "Upcoming coding contest: $title at $timeDesc"
         )
     }
-    context.startActivity(intent)
+    try {
+        context.startActivity(intent)
+    } catch (_: Exception) { }
 }

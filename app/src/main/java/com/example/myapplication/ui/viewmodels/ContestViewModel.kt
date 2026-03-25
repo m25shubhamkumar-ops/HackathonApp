@@ -30,7 +30,7 @@ class ContestViewModel : ViewModel() {
             try {
                 _contests.value = RetrofitClient.instance.getUpcomingContests()
             } catch (e: Exception) {
-                _error.value = e.message
+                _error.value = "Failed to load contests: ${e.message ?: "Network or server error"}"
                 _contests.value = emptyList()
             } finally {
                 _isLoading.value = false
