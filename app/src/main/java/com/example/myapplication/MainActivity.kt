@@ -5,8 +5,10 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -41,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.myapplication.ui.theme.MyApplicationTheme
 
@@ -379,6 +382,20 @@ fun AuthScreen(isDarkTheme: Boolean, isOledMode: Boolean, accentColor: Color, on
     val colors = getAppColors(isDarkTheme, isOledMode)
     val bg = colors["bg"]!!; val textC = colors["text"]!!; val secText = colors["secondaryText"]!!
     var isSignUp by remember { mutableStateOf(false) }; var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    var isGoogleLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val googleSignInHelper = remember(context) { GoogleSignInHelper(context) }
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        googleSignInHelper.handleSignInResult(
+            data = result.data,
+            onSuccess = { isGoogleLoading = false; onLoginSuccess() },
+            onFailure = { error -> isGoogleLoading = false; errorMessage = error }
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(bg).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Box(modifier = Modifier.size(80.dp).clip(RoundedCornerShape(24.dp)).background(accentColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Lock, contentDescription = "Logo", tint = accentColor, modifier = Modifier.size(40.dp)) }
@@ -386,7 +403,26 @@ fun AuthScreen(isDarkTheme: Boolean, isOledMode: Boolean, accentColor: Color, on
         OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accentColor, focusedLabelColor = accentColor, unfocusedTextColor = textC, focusedTextColor = textC)); Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accentColor, focusedLabelColor = accentColor, unfocusedTextColor = textC, focusedTextColor = textC)); Spacer(modifier = Modifier.height(32.dp))
         Button(onClick = onLoginSuccess, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = accentColor, contentColor = Color.White)) { Text(if (isSignUp) "Sign Up" else "Sign In", fontSize = 16.sp, fontWeight = FontWeight.Bold) }; Spacer(modifier = Modifier.height(24.dp))
-        OutlinedButton(onClick = onLoginSuccess, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = textC), border = androidx.compose.foundation.BorderStroke(1.dp, colors["divider"]!!)) { Text("Continue with Google", fontWeight = FontWeight.SemiBold) }; Spacer(modifier = Modifier.weight(1f))
+        if (errorMessage != null) { Text(errorMessage!!, color = Color(0xFFEF4444), fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp)) }
+        OutlinedButton(
+            onClick = {
+                errorMessage = null
+                isGoogleLoading = true
+                googleSignInLauncher.launch(googleSignInHelper.getSignInIntent())
+            },
+            enabled = !isGoogleLoading,
+            modifier = Modifier.fillMaxWidth().height(54.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = textC),
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors["divider"]!!)
+        ) {
+            if (isGoogleLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = accentColor, strokeWidth = 2.dp)
+            } else {
+                Text("Continue with Google", fontWeight = FontWeight.SemiBold)
+            }
+        }
+        Spacer(modifier = Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 24.dp)) { Text(if (isSignUp) "Already have an account? " else "Don't have an account? ", color = secText); Text(text = if (isSignUp) "Sign In" else "Sign Up", color = accentColor, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { isSignUp = !isSignUp }.padding(4.dp)) }
     }
 }
