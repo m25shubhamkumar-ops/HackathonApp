@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">My Application</string>
+    <!-- Replace with your actual Web Client ID from Firebase Console > Authentication > Sign-in method > Google -->
+    <string name="google_web_client_id">000000000000-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com</string>
 </resources>
