@@ -45,6 +45,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.example.myapplication.ui.screens.AnalysisScreen
+import com.example.myapplication.ui.screens.ContestScreen
+import com.example.myapplication.ui.screens.HomeScreen
+import com.example.myapplication.ui.screens.PracticeScreen
 import com.example.myapplication.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -55,7 +63,6 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme {
                 // --- GLOBAL APP STATE ---
                 var isLoggedIn by remember { mutableStateOf(false) }
-                var currentTab by remember { mutableStateOf("Home") }
                 var isArenaOpen by remember { mutableStateOf(false) }
                 var isProfileOpen by remember { mutableStateOf(false) }
                 var isSettingsOpen by remember { mutableStateOf(false) }
@@ -76,7 +83,7 @@ class MainActivity : ComponentActivity() {
                         onToggleDarkTheme = { isDarkTheme = !isDarkTheme },
                         onToggleOledMode = { isOledMode = !isOledMode },
                         onSelectAccent = { accentColor = it },
-                        onSignOut = { isLoggedIn = false; isSettingsOpen = false; isProfileOpen = false; currentTab = "Home" }
+                        onSignOut = { isLoggedIn = false; isSettingsOpen = false; isProfileOpen = false }
                     )
                 } else if (isProfileOpen) {
                     ProfileScreen(isDarkTheme, isOledMode, accentColor, onBackPressed = { isProfileOpen = false }) { isSettingsOpen = true }
@@ -84,8 +91,7 @@ class MainActivity : ComponentActivity() {
                     ArenaScreen(arenaUrl, accentColor) { isArenaOpen = false }
                 } else {
                     MainScaffold(
-                        currentTab, isDarkTheme, isOledMode, accentColor,
-                        onTabSelected = { currentTab = it },
+                        isDarkTheme, isOledMode, accentColor,
                         onThemeToggle = { isDarkTheme = !isDarkTheme },
                         onOpenArena = { url -> arenaUrl = url; isArenaOpen = true },
                         onOpenProfile = { isProfileOpen = true }
@@ -108,272 +114,84 @@ fun getAppColors(isDarkTheme: Boolean, isOledMode: Boolean): Map<String, Color> 
 }
 
 @Composable
-fun MainScaffold(currentTab: String, isDarkTheme: Boolean, isOledMode: Boolean, accentColor: Color, onTabSelected: (String) -> Unit, onThemeToggle: () -> Unit, onOpenArena: (String) -> Unit, onOpenProfile: () -> Unit) {
+fun MainScaffold(
+    isDarkTheme: Boolean,
+    isOledMode: Boolean,
+    accentColor: Color,
+    onThemeToggle: () -> Unit,
+    onOpenArena: (String) -> Unit,
+    onOpenProfile: () -> Unit
+) {
+    val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
     val colors = getAppColors(isDarkTheme, isOledMode)
     val bg = colors["bg"]!!
     val surface = colors["surface"]!!
     val secText = colors["secondaryText"]!!
+
+    val navItems = listOf(
+        Triple("Home", Icons.Default.Home, "home"),
+        Triple("Contest", Icons.Default.Star, "contest"),
+        Triple("Practice", Icons.Default.PlayArrow, "practice"),
+        Triple("Analysis", Icons.Default.Settings, "analysis")
+    )
 
     Scaffold(
         containerColor = bg,
         bottomBar = {
             NavigationBar(containerColor = surface, tonalElevation = 8.dp) {
-                listOf(
-                    Triple("Home", Icons.Default.Home, "Home"),
-                    Triple("Contest", Icons.Default.Star, "Contest"),
-                    Triple("Practice", Icons.Default.PlayArrow, "Practice"),
-                    Triple("Analysis", Icons.Default.Settings, "Analysis")
-                ).forEach { (title, icon, tabId) ->
+                navItems.forEach { (title, icon, route) ->
                     NavigationBarItem(
-                        selected = currentTab == tabId, onClick = { onTabSelected(tabId) }, icon = { Icon(icon, contentDescription = title) }, label = { Text(title, fontWeight = FontWeight.Medium) },
-                        colors = NavigationBarItemDefaults.colors(selectedIconColor = accentColor, selectedTextColor = accentColor, indicatorColor = accentColor.copy(alpha = 0.15f), unselectedIconColor = secText, unselectedTextColor = secText)
+                        selected = currentRoute == route,
+                        onClick = {
+                            navController.navigate(route) {
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        icon = { Icon(icon, contentDescription = title) },
+                        label = { Text(title, fontWeight = FontWeight.Medium) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = accentColor,
+                            selectedTextColor = accentColor,
+                            indicatorColor = accentColor.copy(alpha = 0.15f),
+                            unselectedIconColor = secText,
+                            unselectedTextColor = secText
+                        )
                     )
                 }
             }
         }
     ) { innerPadding ->
-        Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-            when (currentTab) {
-                "Home" -> HomeContent(isDarkTheme, isOledMode, accentColor, onThemeToggle, onOpenProfile) { onOpenArena("https://leetcode.com/problemset/all/") }
-                "Practice" -> PracticeContent(isDarkTheme, isOledMode, accentColor, onOpenArena)
-                "Contest" -> ContestScreen(isDarkTheme, isOledMode, accentColor, onOpenArena)
-                "Analysis" -> AnalysisScreen(isDarkTheme, isOledMode, accentColor)
-            }
-        }
-    }
-}
-
-// ============================================================================
-// PARTNER SCREENS: FULLY RESTORED (Contest & Analysis)
-// ============================================================================
-
-@Composable
-fun ContestScreen(isDarkTheme: Boolean, isOledMode: Boolean, accentColor: Color, onOpenArena: (String) -> Unit) {
-    val colors = getAppColors(isDarkTheme, isOledMode)
-    val bg = colors["bg"]!!
-    val surface = colors["surface"]!!
-    val textC = colors["text"]!!
-    val secText = colors["secondaryText"]!!
-
-    val upcoming = remember {
-        listOf(
-            UpcomingContest("LeetCode", "LC", "Oct 15, 18:00 UTC", "Duration", "https://leetcode.com"),
-            UpcomingContest("Codeforces", "CF", "Oct 15, 18:00 UTC", "Duration", "https://codeforces.com"),
-            UpcomingContest("CodeChef", "CC", "Oct 15, 18:00 UTC", "Duration", "https://www.codechef.com"),
-            UpcomingContest("HackerRank", "HR", "Oct 15, 18:00 UTC", "Duration", "https://www.hackerrank.com"),
-            UpcomingContest("GeeksforGeeks", "GFG", "Oct 15, 18:00 UTC", "Duration", "https://www.geeksforgeeks.org")
-        )
-    }
-
-    val contests = remember {
-        listOf(
-            ContestItem("Codeforces Round", "CF", "Sat, 8 PM", "Feb 08", "Div 2", Color(0xFFFFC1D9), "https://codeforces.com"),
-            ContestItem("CodeChef Starters", "CC", "Wed, 8 PM", "Feb 12", "Div 1/2", Color(0xFFC8F7C5), "https://www.codechef.com"),
-            ContestItem("LeetCode Weekly", "LC", "Sun, 9 AM", "Feb 09", "Open", Color(0xFFD2C2FF), "https://leetcode.com"),
-            ContestItem("AtCoder Beginner", "AC", "Sat, 6 PM", "Feb 15", "Div 2", Color(0xFFFFC1D9), "https://atcoder.jp")
-        )
-    }
-
-    LazyColumn(modifier = Modifier.fillMaxSize().background(bg).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-
-        // 1. Upcoming Contests
-        item { Text("Upcoming Contests", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = textC, modifier = Modifier.padding(bottom = 8.dp)) }
-        items(upcoming) { c ->
-            Card(
-                modifier = Modifier.fillMaxWidth().clickable { onOpenArena(c.url) },
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = surface)
-            ) {
-                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(colors["divider"]!!), contentAlignment = Alignment.Center) {
-                        Text(c.badge, fontWeight = FontWeight.Bold, color = textC)
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(c.name, fontWeight = FontWeight.Bold, color = textC)
-                        Text(c.time, fontSize = 12.sp, color = secText)
-                    }
-                    Icon(Icons.Filled.Notifications, contentDescription = "Notify", tint = accentColor)
+        NavHost(
+            navController = navController,
+            startDestination = "home",
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            composable("home") {
+                HomeScreen(isDarkTheme, isOledMode, accentColor, onThemeToggle, onOpenProfile) {
+                    onOpenArena("https://leetcode.com/problemset/all/")
                 }
             }
-        }
-
-        // 2. RESTORED: Daily Activity Grid
-        item { Spacer(Modifier.height(16.dp)); Text("Daily Activity", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = textC) }
-        item {
-            val levels = listOf(0,1,2,3,4,2,1, 0,0,1,3,4,4,2, 1,0,2,3,1,0,0, 1,2,4,3,2,1,0)
-            Card(Modifier.fillMaxWidth(), RoundedCornerShape(12.dp), CardDefaults.cardColors(containerColor = surface)) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Last 4 Weeks", fontWeight = FontWeight.Bold, color = textC)
-                    Spacer(Modifier.height(12.dp))
-                    levels.chunked(7).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            row.forEach { lvl ->
-                                val c = when (lvl) {
-                                    0 -> colors["divider"]!!
-                                    1 -> Color(0xFFD8F5D8)
-                                    2 -> Color(0xFFA8E6A8)
-                                    3 -> Color(0xFF6EDC6E)
-                                    else -> Color(0xFF2E8B2E)
-                                }
-                                Box(Modifier.size(14.dp).background(c, RoundedCornerShape(3.dp)))
-                            }
-                        }
-                        Spacer(Modifier.height(4.dp))
-                    }
-                }
+            composable("contest") {
+                ContestScreen(isDarkTheme, isOledMode, accentColor, onOpenArena)
+            }
+            composable("practice") {
+                PracticeScreen(isDarkTheme, isOledMode, accentColor, onOpenArena)
+            }
+            composable("analysis") {
+                AnalysisScreen(isDarkTheme, isOledMode, accentColor)
             }
         }
-
-        // 3. RESTORED: Major Coding Contests (with pulsing animation)
-        item { Spacer(Modifier.height(16.dp)); Text("Major Coding Contests", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = textC) }
-        items(contests.chunked(2)) { rowItems ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                rowItems.forEach { contest ->
-                    val infinite = rememberInfiniteTransition(label = "pulse")
-                    val scale by infinite.animateFloat(
-                        initialValue = 0.98f, targetValue = 1.0f,
-                        animationSpec = infiniteRepeatable(tween(1200), repeatMode = RepeatMode.Reverse), label = "scale"
-                    )
-                    Card(
-                        modifier = Modifier.weight(1f).height(130.dp).graphicsLayer(scaleX = scale, scaleY = scale).clickable { onOpenArena(contest.url) },
-                        colors = CardDefaults.cardColors(containerColor = if (isDarkTheme) contest.bgColor.copy(alpha = 0.15f) else contest.bgColor),
-                        shape = RoundedCornerShape(18.dp)
-                    ) {
-                        Column(Modifier.padding(12.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(modifier = Modifier.size(32.dp).clip(CircleShape).background(if(isDarkTheme) contest.bgColor else Color.White), contentAlignment = Alignment.Center) {
-                                    Text(contest.badge, fontWeight = FontWeight.Bold, color = if(isDarkTheme) textC else Color.Black)
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                Text(contest.title, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = textC, maxLines = 1)
-                            }
-                            Spacer(Modifier.height(6.dp))
-                            Text("${contest.date} • ${contest.time}", fontSize = 12.sp, color = textC)
-                            Spacer(Modifier.height(4.dp))
-                            Text("Tier: ${contest.tier}", fontSize = 11.sp, color = textC)
-                        }
-                    }
-                }
-                if (rowItems.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
-        item { Spacer(Modifier.height(20.dp)) }
-    }
-}
-
-@Composable
-fun AnalysisScreen(isDarkTheme: Boolean, isOledMode: Boolean, accentColor: Color) {
-    val colors = getAppColors(isDarkTheme, isOledMode)
-    val bg = colors["bg"]!!
-    val textC = colors["text"]!!
-    val secText = colors["secondaryText"]!!
-
-    val sessions = remember {
-        listOf(
-            AnalysisSession("LeetCode - Arrays", "45m", "12 Oct 2023", "LC", Color(0xFFC8F7C5)),
-            AnalysisSession("GeeksforGeeks - Trees", "60m", "13 Oct 2023", "GFG", Color(0xFFFFC4C4)),
-            AnalysisSession("Codeforces - DP", "50m", "14 Oct 2023", "CF", Color(0xFFD8C2FF)),
-            AnalysisSession("LeetCode - Graphs", "40m", "15 Oct 2023", "LC", Color(0xFFB5E3FF)),
-            AnalysisSession("Codeforces - Greedy", "55m", "16 Oct 2023", "CF", Color(0xFFF1F1F1)),
-            AnalysisSession("GeeksforGeeks - Stack", "35m", "17 Oct 2023", "GFG", Color(0xFFDFFFE0))
-        )
-    }
-
-    var selected by remember { mutableStateOf<AnalysisSession?>(null) }
-
-    if (selected == null) {
-        LazyColumn(modifier = Modifier.fillMaxSize().background(bg).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            item { Text("Analysis Sessions", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = textC, modifier = Modifier.padding(bottom = 8.dp)) }
-            item {
-                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Session Platform", fontWeight = FontWeight.Bold, color = secText)
-                    Text("Duration", fontWeight = FontWeight.Bold, color = secText)
-                    Text("Date", fontWeight = FontWeight.Bold, color = secText)
-                }
-            }
-            items(sessions) { s ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable { selected = s },
-                    shape = RoundedCornerShape(10.dp),
-                    colors = CardDefaults.cardColors(containerColor = if (isDarkTheme) s.color.copy(alpha = 0.15f) else s.color)
-                ) {
-                    Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1.2f)) {
-                            Text(s.title, fontWeight = FontWeight.Bold, color = textC)
-                            Text("Problem ID", fontSize = 12.sp, color = secText)
-                        }
-                        Text(s.duration, modifier = Modifier.weight(0.4f), color = textC)
-                        Text(s.date, modifier = Modifier.weight(0.8f), color = textC)
-                    }
-                }
-            }
-        }
-    } else {
-        SessionDetailScreen(selected!!, isDarkTheme, isOledMode, accentColor) { selected = null }
-    }
-}
-
-// RESTORED: Full Logic Details and PDFs
-@Composable
-fun SessionDetailScreen(session: AnalysisSession, isDarkTheme: Boolean, isOledMode: Boolean, accentColor: Color, onBack: () -> Unit) {
-    val colors = getAppColors(isDarkTheme, isOledMode)
-    val bg = colors["bg"]!!
-    val surface = colors["surface"]!!
-    val textC = colors["text"]!!
-    val secText = colors["secondaryText"]!!
-
-    LazyColumn(modifier = Modifier.fillMaxSize().background(bg).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = textC, modifier = Modifier.clickable { onBack() })
-                Spacer(Modifier.width(8.dp))
-                Text("Session Details", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = textC)
-            }
-        }
-        item {
-            Spacer(Modifier.height(8.dp))
-            Text(session.title, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = textC)
-            Text("Duration: ${session.duration}", color = secText)
-            Text("Date: ${session.date}", color = secText)
-            Spacer(Modifier.height(8.dp))
-        }
-
-        val detailMap = listOf(
-            "Questions Solved" to "Two Sum, Binary Search, DP",
-            "Time Taken" to session.duration,
-            "Logic Used" to "Prefix sum + greedy + two pointers",
-            "Good Approach" to "Optimized with O(n) solution"
-        )
-        items(detailMap) { (title, value) ->
-            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = surface)) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(title, fontWeight = FontWeight.Bold, color = textC)
-                    Text(value, color = secText)
-                }
-            }
-        }
-
-        item { Spacer(Modifier.height(16.dp)); Text("PDFs", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = textC) }
-
-        val pdfs = listOf("Your Code PDF", "Wrong vs Right PDF", "Correct Solution PDF")
-        items(pdfs) { title ->
-            Row(modifier = Modifier.fillMaxWidth().background(surface, RoundedCornerShape(10.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Info, contentDescription = null, tint = accentColor)
-                Spacer(Modifier.width(10.dp))
-                Text(title, modifier = Modifier.weight(1f), color = textC)
-                Button(onClick = { }, colors = ButtonDefaults.buttonColors(containerColor = accentColor, contentColor = Color.White)) {
-                    Text("View")
-                }
-            }
-        }
-        item { Spacer(Modifier.height(20.dp)) }
     }
 }
 
 
 // ============================================================================
-// CORE SCREENS (Auth, Home, Practice, Profile, Settings)
+// CORE SCREENS (Auth, Profile, Settings)
 // ============================================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -478,18 +296,6 @@ fun ProfileScreen(isDarkTheme: Boolean, isOledMode: Boolean, accentColor: Color,
 }
 
 @Composable
-fun PracticeContent(isDarkTheme: Boolean, isOledMode: Boolean, accentColor: Color, onOpenArena: (String) -> Unit) {
-    val colors = getAppColors(isDarkTheme, isOledMode); val surface = colors["surface"]!!; val textC = colors["text"]!!; val secText = colors["secondaryText"]!!
-    val platforms = listOf(Platform("LeetCode", "https://leetcode.com/problemset/all/", Color(0xFFFEF3C7), Color(0xFFD97706)), Platform("HackerRank", "https://www.hackerrank.com/domains", Color(0xFFD1FAE5), Color(0xFF059669)), Platform("Codeforces", "https://codeforces.com/problemset", Color(0xFFDBEAFE), Color(0xFF2563EB)), Platform("CodeChef", "https://www.codechef.com/practice", Color(0xFFFFEDD5), Color(0xFFEA580C)))
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 20.dp)) {
-        Text("Practice Arena", color = textC, fontSize = 28.sp, fontWeight = FontWeight.Bold); Spacer(modifier = Modifier.height(8.dp)); Text("Configure a sample test or choose a platform.", color = secText, fontSize = 15.sp); Spacer(modifier = Modifier.height(24.dp))
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = surface), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(16.dp)) { Text("Generate Sample Test", fontWeight = FontWeight.Bold, color = textC, fontSize = 16.sp); Spacer(Modifier.height(12.dp)); Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) { OutlinedButton(onClick = {}, modifier = Modifier.weight(1f), contentPadding = PaddingValues(0.dp)) { Text("Difficulty ▾", color = textC, fontSize = 12.sp) }; OutlinedButton(onClick = {}, modifier = Modifier.weight(1f), contentPadding = PaddingValues(0.dp)) { Text("Duration ▾", color = textC, fontSize = 12.sp) }; OutlinedButton(onClick = {}, modifier = Modifier.weight(1f), contentPadding = PaddingValues(0.dp)) { Text("Questions ▾", color = textC, fontSize = 12.sp) } }; Spacer(Modifier.height(12.dp)); Button(onClick = { }, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = accentColor)) { Text("START TEST", color = Color.White, fontWeight = FontWeight.Bold) } } }
-        Spacer(modifier = Modifier.height(24.dp)); Text("Or jump into a platform:", color = textC, fontSize = 16.sp, fontWeight = FontWeight.Bold); Spacer(modifier = Modifier.height(16.dp))
-        LazyVerticalGrid(columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(bottom = 20.dp)) { items(platforms) { platform -> Card(modifier = Modifier.fillMaxWidth().height(140.dp).clickable { onOpenArena(platform.url) }, colors = CardDefaults.cardColors(containerColor = surface), shape = RoundedCornerShape(20.dp)) { Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Box(modifier = Modifier.size(56.dp).background(if (isDarkTheme) platform.darkColor.copy(alpha = 0.2f) else platform.softColor, CircleShape), contentAlignment = Alignment.Center) { Text(platform.name.first().toString(), color = if (isDarkTheme) platform.softColor else platform.darkColor, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold) }; Spacer(modifier = Modifier.height(16.dp)); Text(platform.name, color = textC, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) } } } }
-    }
-}
-
-@Composable
 fun ArenaScreen(url: String, accentColor: Color, onBackPressed: () -> Unit) {
     BackHandler { onBackPressed() }
     Box(modifier = Modifier.fillMaxSize()) {
@@ -497,29 +303,3 @@ fun ArenaScreen(url: String, accentColor: Color, onBackPressed: () -> Unit) {
         FloatingActionButton(onClick = { }, containerColor = accentColor, contentColor = Color.White, shape = CircleShape, modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp).size(72.dp).shadow(12.dp, CircleShape)) { Icon(Icons.Default.PlayArrow, contentDescription = "Voice Bot", modifier = Modifier.size(36.dp)) }
     }
 }
-
-@Composable
-fun HomeContent(isDarkTheme: Boolean, isOledMode: Boolean, accentColor: Color, onThemeToggle: () -> Unit, onOpenProfile: () -> Unit, onEnterArenaClick: () -> Unit) {
-    val colors = getAppColors(isDarkTheme, isOledMode); val surface = colors["surface"]!!; val textC = colors["text"]!!; val secText = colors["secondaryText"]!!; val divColor = colors["divider"]!!
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 20.dp)) {
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) { Text("Hello, Ujjwal! 👋", color = textC, fontSize = 28.sp, fontWeight = FontWeight.Bold); Spacer(modifier = Modifier.height(4.dp)); Text("Current Rating: 1542 | LeetCode", color = secText, fontSize = 15.sp, fontWeight = FontWeight.Medium) }
-            Card(modifier = Modifier.clickable { onThemeToggle() }, colors = CardDefaults.cardColors(containerColor = surface), shape = RoundedCornerShape(12.dp)) { Text(if (isDarkTheme) "☀️" else "🌙", color = accentColor, fontSize = 18.sp, modifier = Modifier.padding(10.dp)) }
-            Spacer(modifier = Modifier.width(12.dp))
-            Box(modifier = Modifier.size(44.dp).clip(CircleShape).background(surface).clickable { onOpenProfile() }.border(2.dp, accentColor, CircleShape), contentAlignment = Alignment.Center) { Icon(Icons.Default.Person, contentDescription = "Profile", tint = secText) }
-        }
-        Spacer(modifier = Modifier.height(32.dp)); Text("Upcoming Contests", color = textC, fontSize = 18.sp, fontWeight = FontWeight.Bold); Spacer(modifier = Modifier.height(16.dp))
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = surface), shape = RoundedCornerShape(20.dp)) { Column(modifier = Modifier.padding(20.dp)) { Text("LeetCode Weekly 385", color = textC, fontSize = 20.sp, fontWeight = FontWeight.Bold); Spacer(modifier = Modifier.height(8.dp)); Text("Difficulty: Medium - Hard", color = secText, fontSize = 14.sp); Spacer(modifier = Modifier.height(12.dp)); Row(verticalAlignment = Alignment.CenterVertically) { Box(modifier = Modifier.size(8.dp).background(accentColor, CircleShape)); Spacer(modifier = Modifier.width(8.dp)); Text("Starts in: 02:14:00", color = accentColor, fontSize = 15.sp, fontWeight = FontWeight.Bold) }; Spacer(modifier = Modifier.height(20.dp)); Button(onClick = { onEnterArenaClick() }, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = accentColor, contentColor = Color.White)) { Text("Enter Arena", fontSize = 16.sp, fontWeight = FontWeight.Bold) } } }
-        Spacer(modifier = Modifier.height(32.dp)); Text("Your Progress", color = textC, fontSize = 18.sp, fontWeight = FontWeight.Bold); Spacer(modifier = Modifier.height(16.dp))
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = surface), shape = RoundedCornerShape(20.dp)) { Column(modifier = Modifier.padding(20.dp)) { Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Daily Goal", color = textC, fontSize = 16.sp, fontWeight = FontWeight.Bold); Text("3/5 Problems", color = accentColor, fontSize = 16.sp, fontWeight = FontWeight.Bold) }; Spacer(modifier = Modifier.height(16.dp)); LinearProgressIndicator(progress = { 0.6f }, modifier = Modifier.fillMaxWidth().height(8.dp), color = accentColor, trackColor = divColor, strokeCap = StrokeCap.Round); Spacer(modifier = Modifier.height(24.dp)); Box(modifier = Modifier.fillMaxWidth().height(110.dp).drawBehind { drawRoundRect(color = divColor, style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f)), cornerRadius = CornerRadius(16.dp.toPx(), 16.dp.toPx())) }, contentAlignment = Alignment.Center) { Text("Rating Trend Chart Placeholder", color = secText, fontSize = 14.sp, fontWeight = FontWeight.Medium) } } }
-        Spacer(modifier = Modifier.height(20.dp))
-    }
-}
-
-// ============================================================================
-// DATA CLASSES
-// ============================================================================
-data class Platform(val name: String, val url: String, val softColor: Color, val darkColor: Color)
-data class AnalysisSession(val title: String, val duration: String, val date: String, val platform: String, val color: Color)
-data class ContestItem(val title: String, val badge: String, val time: String, val date: String, val tier: String, val bgColor: Color, val url: String)
-data class UpcomingContest(val name: String, val badge: String, val time: String, val duration: String, val url: String)
